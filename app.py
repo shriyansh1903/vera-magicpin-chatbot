@@ -37,6 +37,15 @@ composer = LLMComposer(model_name=settings.MODEL)
 decision_engine = DecisionEngine(context_store, conversation_store, composer)
 validator = OutputValidator()
 
+@app.on_event("startup")
+async def startup_event():
+    import os
+    if os.getenv("ENABLE_KEEP_ALIVE", "").lower() in ("true", "1", "yes"):
+        from keep_alive import start_keep_alive_thread
+        ping_url = os.getenv("PING_URL")
+        interval = int(os.getenv("PING_INTERVAL", "300"))
+        start_keep_alive_thread(target_url=ping_url, interval=interval)
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
@@ -215,9 +224,12 @@ async def reply(req: ReplyRequest):
     )
 
 @app.get("/v1/healthz", response_model=HealthzResponse)
+@app.get("/v1/ping")
+@app.get("/")
 async def healthz():
     """
     Health check endpoint returning system status, uptime, and context counts.
+    Supports UptimeRobot and automated pingers on /, /v1/healthz, and /v1/ping.
     """
     uptime = round(time.time() - START_TIME, 2)
     counts = context_store.get_counts()
